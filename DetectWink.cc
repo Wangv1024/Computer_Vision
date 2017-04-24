@@ -15,6 +15,10 @@ using namespace cv;
    following folder: bulid/etc/haarscascades
    Set OPENCV_ROOT to the location of opencv in your system
 */
+double const NORM_WIDTH = 500.0f;
+double const FACE_NORM_WIDTH = 250;
+
+
 string cascades = "/usr/local/Cellar/opencv/2.4.13.2/share/OpenCV/haarcascades/";
 string FACES_CASCADE_NAME = cascades + "haarcascade_frontalface_alt.xml";
 string EYES_CASCADE_NAME = cascades + "haarcascade_eye.xml";
@@ -29,16 +33,33 @@ void drawEllipse(Mat frame, const Rect rect, int r, int g, int b) {
           Scalar(r, g, b), 2, 8, 0 );
 }
 
+Rect coordinate_Transfer_toOrigin_Image(Rect face_resized, double resize_factor){
+  Rect origin = Rect( face_resized.x * 1.0 / resize_factor,
+                      face_resized.y * 1.0 / resize_factor,
+                      face_resized.width * 1.0 / resize_factor,
+                      face_resized.height * 1.0 / resize_factor
+                      );
+  return origin;
+}
 
-bool detectWink(Mat frame, Point location, Mat ROI, CascadeClassifier cascade) {
+
+bool detectWink(Mat frame, Point location, Mat detect_image, CascadeClassifier cascade, double face_norm_Scale) {
   // frame,ctr are only used for drawing the detected eyes
   vector<Rect> eyes;
-  cascade.detectMultiScale(ROI, eyes, 1.1, 5, 0, Size(10, 10));
+  cascade.detectMultiScale(detect_image, eyes, 1.1, 5, 0, Size(FACE_NORM_WIDTH / 8, FACE_NORM_WIDTH / 16));
+//  cascade.detectMultiScale(detect_image, eyes, 1.1, 5, 0, Size(30, 30));
 
   int neyes = (int)eyes.size();
   for( int i = 0; i < neyes ; i++ ) {
     Rect eyes_i = eyes[i];
-    drawEllipse(frame, eyes_i + location, 255, 255, 0);
+
+    Rect origin_eye_postion = Rect( eyes_i.x / face_norm_Scale,
+                                    eyes_i.y / face_norm_Scale,
+                                    eyes_i.width / face_norm_Scale,
+                                    eyes_i.height / face_norm_Scale
+                                    );
+    // draw detected eyes with blue circle
+    drawEllipse(frame, origin_eye_postion + location, 255, 255, 0);
   }
   return(neyes == 1);
 }
@@ -46,31 +67,41 @@ bool detectWink(Mat frame, Point location, Mat ROI, CascadeClassifier cascade) {
 // you need to rewrite this function
 int detect(Mat frame,
            CascadeClassifier cascade_face, CascadeClassifier cascade_eyes) {
-  Mat frame_gray;
-  vector<Rect> faces;
 
-  cvtColor(frame, frame_gray, CV_BGR2GRAY);
+
+
 
 //  equalizeHist(frame_gray, frame_gray); // input, outuput
 //  medianBlur(frame_gray, frame_gray, 5); // input, output, neighborhood_size
 //  blur(frame_gray, frame_gray, Size(5,5), Point(-1,-1));
 /*  input,output,neighborood_size,center_location (neg means - true center) */
-  /*
-  double scaling = 1.05;
+/*double scaling = 1.05;
   Size s = frame.size();
   if (s.width > 500 || s.height > 500) {
     scaling = 1.50;
-  }
-  */
+  }  */
+  
   Size s = frame.size();
-  double f = 500.0f / s.width;
-  cout << s.width << " " << f << " " << s.height << endl;
-  Mat frame_dst(Size(500, s.height * f), frame_gray.type());
-  resize(frame, frame_dst, frame_dst.size(), 0, 0, cv::INTER_LINEAR);
-  imshow("resized", frame_dst);
+  double const RESIZE_SCALE = NORM_WIDTH / s.width;
+  double const NORM_HEIGHT = RESIZE_SCALE * s.height;
 
-  cascade_face.detectMultiScale(frame_dst, faces,
-                                1.05, 3, 0|CV_HAAR_SCALE_IMAGE, Size(30, 30));
+  // Normalize all image to size of Norm_width  Norm_height
+  cout << s.width << " " << RESIZE_SCALE << " " << s.height << endl;
+  Mat frame_normalized(Size(NORM_WIDTH, NORM_HEIGHT), frame.type());
+  resize(frame, frame_normalized, frame_normalized.size(), 0, 0, cv::INTER_LINEAR);
+//  imshow("resized", frame_normalized);
+
+
+  // Transfer image to gray image and detect all the faces
+  Mat frame_normalized_gray;
+  vector<Rect> faces;  
+
+  cvtColor(frame_normalized, frame_normalized_gray, CV_BGR2GRAY);  
+  // cascade_face.detectMultiScale(frame_normalized_gray, faces,
+  //                               1.02, 7, 0|CV_HAAR_SCALE_IMAGE, Size(80, 80)); //
+  cascade_face.detectMultiScale(frame_normalized_gray, faces,
+                                1.02, 7, 0|CV_HAAR_SCALE_IMAGE, Size(80, 80)); //
+
   
   /* frame_gray - the input image
      faces - the output detections.
@@ -80,25 +111,47 @@ int detect(Mat frame,
 	 smaller (2,1) less selective in determining detection
 	 0 - return all detections.
      0|CV_HAAR_SCALE_IMAGE - flags. This flag means scale image to match pattern
-     Size(30, 30)) - size in pixels of smallest allowed detection
-  */
+     Size(30, 30)) - size in pixels of smallest allowed detection  */
 
   int detected = 0;
-  frame = frame_dst;
 
   int nfaces = (int)faces.size();
   for( int i = 0; i < nfaces ; i++ ) {
-    Rect face = faces[i];
-    drawEllipse(frame, face, 255, 0, 255);
-    Mat faceROI(frame_gray, face);
-    Mat dst(Size(150, 150), faceROI.type());
-    resize(faceROI, dst, dst.size(), 0, 0, cv::INTER_CUBIC);
-    imshow("faceROI" + to_string(i), dst);
+//    Rect face = faces[i];
+    Rect face = Rect( faces[i].x,
+                      faces[i].y,
+                      faces[i].width,
+                      faces[i].height * 0.6
+      );
+
+    /// transfer x y position to original not normalized image and draw a circle
+    Rect origin_face_position = coordinate_Transfer_toOrigin_Image(face, RESIZE_SCALE);
+
+
+    /// extract face from original image and normalize it to specific size 
+    Mat faceROI(frame, origin_face_position);
+    Mat Gray_Extracted_Face;
+    cvtColor(faceROI, Gray_Extracted_Face, CV_BGR2GRAY);  
+    //--- normalize face for future detection
+    double const FACE_NORM_SCALE = FACE_NORM_WIDTH / Gray_Extracted_Face.size().width;
+    double const FACE_NORM_HEIGHT = FACE_NORM_SCALE * Gray_Extracted_Face.size().height;
+    Mat Normlized_GrayFace_ForDetect(Size(FACE_NORM_WIDTH, FACE_NORM_HEIGHT), faceROI.type());
+
+    resize(Gray_Extracted_Face, Normlized_GrayFace_ForDetect, Normlized_GrayFace_ForDetect.size(),
+            0, 0, cv::INTER_CUBIC);
+
+//    resize(faceROI, dst, dst.size(), 0, 0, cv::INTER_CUBIC);
+    imshow("face_Normalized" + to_string(i), Normlized_GrayFace_ForDetect);
     cout << "face " << i << " :" << face.width << " , " << face.height << endl;
-    if(detectWink(frame, Point(face.x, face.y), dst, cascade_eyes)) {
-      drawEllipse(frame, face, 0, 255, 0);
+
+    //  from normalize the gray face image, we detect eyes on it.
+    if(detectWink(frame, Point(origin_face_position.x, origin_face_position.y),
+                   Normlized_GrayFace_ForDetect, cascade_eyes, FACE_NORM_SCALE)) {
+      drawEllipse(frame, origin_face_position, 0, 255, 0);
       detected++;
     }
+    else
+        drawEllipse(frame, origin_face_position, 255, 0, 255);  // contains no open eyes, or more than 1 eyes, draw purple
   }
 
   // int detected = 0;
