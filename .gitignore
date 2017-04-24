@@ -1,0 +1,14 @@
+*.cmake
+*.dir
+*.log
+*.bin
+*.cxx
+*.c
+*.bin
+*.out
+*.o
+*.make
+*.jpg
+*.jpeg
+*.png
+*.check_cache

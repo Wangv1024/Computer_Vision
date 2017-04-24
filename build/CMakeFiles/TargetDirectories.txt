@@ -1,0 +1,4 @@
+/Users/weihengwang/AcademicProject/CVProject2/build/CMakeFiles/rebuild_cache.dir
+/Users/weihengwang/AcademicProject/CVProject2/build/CMakeFiles/edit_cache.dir
+/Users/weihengwang/AcademicProject/CVProject2/build/CMakeFiles/silence.dir
+/Users/weihengwang/AcademicProject/CVProject2/build/CMakeFiles/wink.dir
