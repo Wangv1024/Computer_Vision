@@ -16,7 +16,7 @@ using namespace cv;
    Set OPENCV_ROOT to the location of opencv in your system
 */
 double const NORM_WIDTH = 500.0f;
-double const FACE_NORM_WIDTH = 250;
+double const FACE_NORM_WIDTH = 215;
 
 
 string cascades = "/usr/local/Cellar/opencv/2.4.13.2/share/OpenCV/haarcascades/";
@@ -46,8 +46,10 @@ Rect coordinate_Transfer_toOrigin_Image(Rect face_resized, double resize_factor)
 bool detectWink(Mat frame, Point location, Mat detect_image, CascadeClassifier cascade, double face_norm_Scale) {
   // frame,ctr are only used for drawing the detected eyes
   vector<Rect> eyes;
-  cascade.detectMultiScale(detect_image, eyes, 1.1, 5, 0, Size(FACE_NORM_WIDTH / 8, FACE_NORM_WIDTH / 16));
-//  cascade.detectMultiScale(detect_image, eyes, 1.1, 5, 0, Size(30, 30));
+//  cascade.detectMultiScale(detect_image, eyes, 1.1, 5, 0, Size(FACE_NORM_WIDTH / 8, FACE_NORM_WIDTH / 16));
+//  cascade.detectMultiScale(detect_image, eyes, 1.1, 7, 0, Size(30, 30));
+  cascade.detectMultiScale(detect_image, eyes, 1.1, 6, 0, Size(40, 40));
+//  cascade.detectMultiScale(detect_image, eyes, 1.09, 7, 0, Size(FACE_NORM_WIDTH * 8.0 / 65.0, FACE_NORM_WIDTH * 9.0 / 65.0));
 
   int neyes = (int)eyes.size();
   for( int i = 0; i < neyes ; i++ ) {
@@ -100,7 +102,7 @@ int detect(Mat frame,
   // cascade_face.detectMultiScale(frame_normalized_gray, faces,
   //                               1.02, 7, 0|CV_HAAR_SCALE_IMAGE, Size(80, 80)); //
   cascade_face.detectMultiScale(frame_normalized_gray, faces,
-                                1.02, 7, 0|CV_HAAR_SCALE_IMAGE, Size(80, 80)); //
+                                1.03, 4, 0|CV_HAAR_SCALE_IMAGE, Size(70, 70)); //
 
   
   /* frame_gray - the input image
@@ -117,21 +119,28 @@ int detect(Mat frame,
 
   int nfaces = (int)faces.size();
   for( int i = 0; i < nfaces ; i++ ) {
-//    Rect face = faces[i];
+    // Rect face = Rect( faces[i].x,
+    //                   faces[i].y,
+    //                   faces[i].width,
+    //                   faces[i].height * 0.75
+    //   );
     Rect face = Rect( faces[i].x,
                       faces[i].y,
                       faces[i].width,
                       faces[i].height * 0.6
       );
 
+
     /// transfer x y position to original not normalized image and draw a circle
     Rect origin_face_position = coordinate_Transfer_toOrigin_Image(face, RESIZE_SCALE);
 
 
     /// extract face from original image and normalize it to specific size 
-    Mat faceROI(frame, origin_face_position);
-    Mat Gray_Extracted_Face;
-    cvtColor(faceROI, Gray_Extracted_Face, CV_BGR2GRAY);  
+//    Mat faceROI(frame, origin_face_position);
+
+    Mat faceROI(frame_normalized_gray, face); // extract from normalized one
+    Mat Gray_Extracted_Face = faceROI;
+//    cvtColor(faceROI, Gray_Extracted_Face, CV_BGR2GRAY);  
     //--- normalize face for future detection
     double const FACE_NORM_SCALE = FACE_NORM_WIDTH / Gray_Extracted_Face.size().width;
     double const FACE_NORM_HEIGHT = FACE_NORM_SCALE * Gray_Extracted_Face.size().height;
@@ -146,7 +155,7 @@ int detect(Mat frame,
 
     //  from normalize the gray face image, we detect eyes on it.
     if(detectWink(frame, Point(origin_face_position.x, origin_face_position.y),
-                   Normlized_GrayFace_ForDetect, cascade_eyes, FACE_NORM_SCALE)) {
+                   Normlized_GrayFace_ForDetect, cascade_eyes, FACE_NORM_SCALE * RESIZE_SCALE)) {
       drawEllipse(frame, origin_face_position, 0, 255, 0);
       detected++;
     }
@@ -186,13 +195,14 @@ int runonFolder(const CascadeClassifier cascade1,
   string windowName;
   struct dirent *entry;
   int detections = 0;
+  int number = 1;
   while (!finish && (entry = readdir(dir)) != NULL) {
     char *name = entry->d_name;
     string dname = folder + name;
     Mat img = imread(dname.c_str(), CV_LOAD_IMAGE_UNCHANGED);
     if(!img.empty()) {
       int d = detect(img, cascade1, cascade2);
-      cerr << d << " detections" << endl;
+      cerr << "Picture: " << number++ << "  " << d << " detections" << endl;
       detections += d;
       if(!windowName.empty()) destroyWindow(windowName);
       windowName = name;
